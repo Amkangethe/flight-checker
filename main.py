@@ -2,6 +2,7 @@
 import requests
 import os
 from dotenv import load_dotenv
+from datetime import datetime, timedelta
 
 load_dotenv()  # Loads variables from .env
 
@@ -120,9 +121,103 @@ def view_airport_details():
             print("Exiting the airport details view.")
             break
 
-        
+def search_route():
+    from datetime import datetime, timedelta
+    while True:
+        airport = input("Enter the IATA code of the departure airport (e.g., IAD): ").strip().upper()
+        date = input("Enter the date (MM/DD/YYYY): ").strip()
+        arrival_iata = input("Enter the IATA code of the arrival airport you want (e.g., JFK): ").strip().upper()
+        try:
+            # Accept MM/DD/YYYY and convert to YYYY-MM-DD
+            day_dt = datetime.strptime(date, "%m/%d/%Y")
+            break
+        except ValueError:
+            retry = input("Invalid date format. Would you like to try again? (y/n): ").strip().lower()
+            if retry != 'y':        
+                print("Exiting the route search.")
+                return
 
-
+    # Define two 12-hour windows
+    windows = [
+        (day_dt.replace(hour=0, minute=0), day_dt.replace(hour=11, minute=59)),
+        (day_dt.replace(hour=12, minute=0), day_dt.replace(hour=23, minute=59))
+    ]
+    found = False
+    match_count = 0
+    for start_dt, end_dt in windows:
+        start_iso = start_dt.strftime("%Y-%m-%dT%H:%M")
+        end_iso = end_dt.strftime("%Y-%m-%dT%H:%M")
+        url = f"https://aerodatabox.p.rapidapi.com/flights/airports/iata/{airport}/{start_iso}/{end_iso}"
+        querystring = {
+            "withLeg": "true",
+            "direction": "Both",
+            "withCancelled": "true",
+            "withCodeshared": "true",
+            "withCargo": "true",
+            "withPrivate": "true",
+            "withLocation": "false"
+        }
+        headers = {
+            "x-rapidapi-key": api_key,
+            "x-rapidapi-host": "aerodatabox.p.rapidapi.com"
+        }
+        try:
+            response = requests.get(url, headers=headers, params=querystring)
+            if response.status_code != 200:
+                print(f"API request failed: {response.status_code} {response.text}")
+                continue
+            data = response.json()
+            departures = data.get("departures", [])
+            for flight in departures:
+                arr = flight["arrival"]
+                arr_iata = arr["airport"].get("iata", "").upper()
+                if arr_iata == arrival_iata.upper():
+                    dep = flight["departure"]
+                    sched = dep.get('scheduledTime', {})
+                    local_time = sched.get('local', 'N/A')
+                    ampm_time = 'N/A'
+                    if local_time != 'N/A':
+                        try:
+                            # Remove timezone info for parsing (handles both - and + offsets)
+                            if '-' in local_time[11:] or '+' in local_time[11:]:
+                                time_part = local_time[:16]
+                            else:
+                                time_part = local_time.strip()
+                            dt_obj = datetime.strptime(time_part, "%Y-%m-%d %H:%M")
+                            hour = dt_obj.hour
+                            minute = dt_obj.minute
+                            if hour == 0:
+                                ampm_time = f"12:{minute:02d} AM"
+                            elif hour < 12:
+                                ampm_time = f"{hour}:{minute:02d} AM"
+                            elif hour == 12:
+                                ampm_time = f"12:{minute:02d} PM"
+                            else:
+                                ampm_time = f"{hour-12}:{minute:02d} PM"
+                        except Exception:
+                            ampm_time = 'Invalid time'
+                    terminal = dep.get('terminal', 'N/A')
+                    gate = dep.get('gate', 'N/A')
+                    print(f"Flight {flight['number']}:")
+                    print(f"  Departure Time (local): {ampm_time}")
+                    print(f"  From: {airport} (Terminal {terminal}, Gate {gate})")
+                    print(f"  To: {arr['airport'].get('name', 'Unknown')} ({arr_iata})")
+                    print(f"  Status: {flight['status']}")
+                    print()
+                    found = True
+                    match_count += 1
+        except Exception as e:
+            print(f"An error occurred: {e}")
+    if not found:
+        print(f"No route available from {airport} to {arrival_iata} on {day_dt.strftime('%Y-%m-%d')}.")
+    else:
+        print(f"Total matching flights found: {match_count}")
+    # Ask if the user wants to search again
+    retry = input("Would you like to search for another route? (y/n): ").strip().lower()
+    if retry == 'y':
+        search_route()
+    else:
+        print("Exiting the route search.")
 
 if __name__ == "__main__":
     # Greetings message
@@ -132,8 +227,8 @@ if __name__ == "__main__":
     while True:
         print("1. Search for Airports")
         print("2. View Airport Details")
-        print("3. Search for Flights by Flight Number")
-        print("4. Search for Flights by Route")
+        print("3. Search for Flights by Route")
+        # print("4. Search for Flights by Route")
         print("5. View Arrivals/Departures at an Airport")
         print("6. Check Flight Status")
         print("7. Exit")
@@ -150,7 +245,9 @@ if __name__ == "__main__":
         elif userInput == 2:
             view_airport_details()
             print()
-        # ...existing code for other options...
+        elif userInput == 3:
+            search_route()
+            print()
         elif userInput == 7:
             print("Goodbye!")
             break
