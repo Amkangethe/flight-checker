@@ -143,7 +143,6 @@ def search_route():
         (day_dt.replace(hour=12, minute=0), day_dt.replace(hour=23, minute=59))
     ]
     found = False
-    match_count = 0
     for start_dt, end_dt in windows:
         start_iso = start_dt.strftime("%Y-%m-%dT%H:%M")
         end_iso = end_dt.strftime("%Y-%m-%dT%H:%M")
@@ -170,8 +169,8 @@ def search_route():
             departures = data.get("departures", [])
             for flight in departures:
                 arr = flight["arrival"]
-                arr_iata = arr["airport"].get("iata", "").upper()
-                if arr_iata == arrival_iata.upper():
+                arr_iata = arr["airport"].get("iata", "")
+                if arr_iata == arrival_iata:
                     dep = flight["departure"]
                     sched = dep.get('scheduledTime', {})
                     local_time = sched.get('local', 'N/A')
@@ -199,25 +198,18 @@ def search_route():
                     terminal = dep.get('terminal', 'N/A')
                     gate = dep.get('gate', 'N/A')
                     print(f"Flight {flight['number']}:")
+                    print(f"  Airline: {flight['airline']['name']}")
+                    print(f"  Model: {flight['aircraft']['model']}")
                     print(f"  Departure Time (local): {ampm_time}")
                     print(f"  From: {airport} (Terminal {terminal}, Gate {gate})")
                     print(f"  To: {arr['airport'].get('name', 'Unknown')} ({arr_iata})")
                     print(f"  Status: {flight['status']}")
                     print()
                     found = True
-                    match_count += 1
         except Exception as e:
             print(f"An error occurred: {e}")
     if not found:
         print(f"No route available from {airport} to {arrival_iata} on {day_dt.strftime('%Y-%m-%d')}.")
-    else:
-        print(f"Total matching flights found: {match_count}")
-    # Ask if the user wants to search again
-    retry = input("Would you like to search for another route? (y/n): ").strip().lower()
-    if retry == 'y':
-        search_route()
-    else:
-        print("Exiting the route search.")
 
 if __name__ == "__main__":
     # Greetings message
